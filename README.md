@@ -8,7 +8,7 @@ Centralized DevOps, Infrastructure-as-Code (IaC), and CI/CD pipelines for the fu
 
 > *Note: This diagram illustrates the active Continuous Integration (CI) workflow. The end-to-end architecture diagram will be updated once Continuous Deployment (CD) and Terraform infrastructure are added.*
 
-![CI Pipeline Architecture](./images/ci.svg)
+![CI Pipeline Architecture](./images/CI.svg)
 ---
 
 ## Repository Structure

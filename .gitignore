@@ -1,0 +1,36 @@
+# Local .terraform directories (provider binaries & downloaded modules)
+**/.terraform/*
+
+# State files (contain sensitive resource IDs, IPs, and secrets)
+*.tfstate
+*.tfstate.*
+
+# Crash log files
+crash.log
+crash.*.log
+
+# Exclude all .tfvars files (often contain sensitive credentials/values)
+*.tfvars
+*.tfvars.json
+
+# Ignore override files (local developer overrides)
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Ignore CLI configuration files
+.terraformrc
+terraform.rc
+
+# Saved plan files (can contain secrets)
+*.tfplan
+# Environment & Secrets
+.env
+*.pem
+*.key
+
+# OS & Editor
+.DS_Store
+.vscode/
+.idea/

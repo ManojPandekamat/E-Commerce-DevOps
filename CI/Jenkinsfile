@@ -1,0 +1,239 @@
+
+// ########## Required creds ############
+// - 'github-credentials' - USERNAME and PAT
+// - 'sonarqube-server' - SonarQube server credentials
+// ######### TOOLS Required ##############
+// - jdk 'jdk21'
+// - sonarScanner 'sonar'
+pipeline {
+    agent any
+    options {
+    skipDefaultCheckout(true)
+}
+
+
+    tools {
+        // Created in jenkins dashboard
+        jdk 'jdk21'
+        maven 'maven'
+        nodejs 'nodejs24'
+    }
+
+    stages{
+        // Checkout git repository
+        stage('Repo-Checkout'){
+            steps{
+                echo "[Info] Cloning repository"
+                script{
+
+                def gitVars = git branch: 'main',
+                credentialsId: 'github-credentials',
+                url: "https://github.com/manojpandekamat/E-CommerceApp.git"
+                env.GIT_COMMIT = gitVars.GIT_COMMIT
+                 env.GIT_PREVIOUS_SUCCESSFUL_COMMIT = gitVars.GIT_PREVIOUS_SUCCESSFUL_COMMIT ?: ''
+                }
+            }
+        }
+
+        // Detect changes
+        stage('Detect-changes'){
+        steps{
+script {
+            echo "[INFO] Current commit: ${env.GIT_COMMIT}"
+            echo "[INFO] Previous successful commit: ${env.GIT_PREVIOUS_SUCCESSFUL_COMMIT}"
+           
+            def previousCommit = env.GIT_PREVIOUS_SUCCESSFUL_COMMIT
+            def currentCommit = env.GIT_COMMIT
+
+        if(!previousCommit){
+            echo '[INFO] No previous successful commit found'
+            echo '[INFO] Building both FRONTEND and BACKEND'
+            env.FRONTEND_CHANGED='true'
+            env.BACKEND_CHANGED='true'
+        }else{
+            def changedFiles = sh(script: "git diff --name-only ${previousCommit} ${currentCommit}",returnStdout: true)
+
+            def files = changedFiles.trim() ?
+            changedFiles.trim().readLines() : []
+
+
+            env.FRONTEND_CHANGED =files.any {  
+           
+                it.startsWith('frontend/')
+            } ? 'true' : 'false'
+
+            if (env.FRONTEND_CHANGED == 'true') {
+                echo '[INFO] FRONTEND change detected'
+            } else {
+                echo '[INFO] NO FRONTEND change detected'
+            }
+
+            env.BACKEND_CHANGED =files.any {file->
+                file.startsWith('Backend/')
+            } ? 'true' : 'false'  
+
+            if (env.BACKEND_CHANGED == 'true') {
+                    echo '[INFO] BACKEND change detected'
+            } else {
+                    echo '[INFO] NO BACKEND change detected'
+            }     
+        }
+        
+        }
+        }
+        
+        }
+    
+
+    stage('frontend-install'){
+        when {
+            expression{
+                env.FRONTEND_CHANGED == 'true'
+            }
+        }
+
+    steps {
+        echo "[INFO] Installing frontend dependencies"
+        dir('frontend') {
+            sh 'npm ci'
+        }
+    }
+    }
+
+    stage('frontend-test'){
+        when {
+            expression{
+                env.FRONTEND_CHANGED == 'true'
+            }
+        }
+
+    steps {
+        echo "[INFO] Running frontend tests"
+        dir('frontend') {
+            sh 'CI=true npm test -- --coverage --watchAll=false'
+        }
+    }
+    }
+
+    
+stage('Frontend SonarQube Analysis') {
+    when {
+        expression { env.FRONTEND_CHANGED == 'true' }
+    }
+    steps {
+        dir('frontend') {
+            echo "[INFO] Running SonarQube analysis for frontend"
+            script{
+                def sonarScannerHome = tool name: 'sonar', type: 'hudson.plugins.sonar.SonarRunnerInstallation'
+
+            withSonarQubeEnv('sonarqube-server') {
+                sh """
+                    ${sonarScannerHome}/bin/sonar-scanner \
+                    -Dsonar.projectKey=ecommerce-frontend \
+                    -Dsonar.token=\$SONAR_AUTH_TOKEN \
+                    -Dsonar.sources=src \
+                    -Dsonar.tests=src \
+                    -Dsonar.test.inclusions=**/*.test.js,**/*.test.jsx,**/*.test.ts,**/*.test.tsx \
+                    -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
+                """
+            }
+            }
+        }
+    }
+}
+
+stage('Frontend Quality Gate') {
+    when {
+        expression { env.FRONTEND_CHANGED == 'true' }
+    }
+    steps {
+        timeout(time: 10, unit: 'MINUTES') {
+            echo "[INFO] Waiting for SonarQube quality gate"
+            waitForQualityGate abortPipeline: true
+        }
+    }
+}
+
+stage('Frontend Production Build') {
+    when {
+        expression { env.FRONTEND_CHANGED == 'true' }
+    }
+    steps {
+        echo "[INFO] Building frontend for production"
+        dir('frontend') {
+            sh 'npm run build'
+        }
+    }
+}
+
+stage('Archive Frontend Artifact') {
+    when {
+        expression { env.FRONTEND_CHANGED == 'true' }
+    }
+    steps {
+        echo "[INFO] Archiving frontend artifact"
+        archiveArtifacts artifacts: 'frontend/build/**',
+                         fingerprint: true
+    }
+}
+
+
+
+//############# BACKEND CI########################
+
+stage('backend-package-install'){
+    when {
+        expression{
+            env.BACKEND_CHANGED == 'true'
+        }
+    }
+    steps{
+        dir('Backend'){
+            echo '[INFO] Building backend, running tests and coverage'
+            sh 'mvn clean verify'
+        }
+    }
+}
+
+stage('Backend SonarQube Analysis') {
+    when {
+        expression { env.BACKEND_CHANGED == 'true' }
+    }
+    steps {
+        dir('Backend') {
+            withSonarQubeEnv('sonarqube-server') {
+                sh '''
+                    mvn org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
+                    -Dsonar.projectKey=ecommerce-backend \
+                    -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
+                '''
+            }
+        }
+    }
+}
+
+stage('Backend Quality Gate') {
+    when {
+        expression { env.BACKEND_CHANGED == 'true' }
+    }
+    steps {
+        timeout(time: 10, unit: 'MINUTES') {
+            waitForQualityGate abortPipeline: true
+        }
+    }
+}
+
+stage('Archive Backend Artifact') {
+    when {
+        expression { env.BACKEND_CHANGED == 'true' }
+    }
+    steps {
+        archiveArtifacts(
+            artifacts: 'Backend/target/*.jar,Backend/Dockerfile',
+            fingerprint: true
+        )
+    }
+}
+
+}
+}

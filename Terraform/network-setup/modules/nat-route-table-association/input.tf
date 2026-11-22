@@ -1,0 +1,11 @@
+variable "subnet_id" {
+  type = string
+}
+
+variable "route_table_id" {
+  type = string
+}
+
+variable "nat_gateway_id" {
+  type = string
+}

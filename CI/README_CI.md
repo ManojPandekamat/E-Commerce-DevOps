@@ -84,7 +84,7 @@ To prevent `waitForQualityGate` from hanging until timeout, SonarQube must notif
 
 ### Architecture Diagram
 
-![CI Pipeline Architecture](../images/ci.svg)
+![CI Pipeline Architecture](../images/CI.svg)
 
 ### Stage-by-Stage Breakdown (`CI/Jenkinsfile`)
 
